@@ -88,7 +88,7 @@ public:
 				std::string processNameA(processNameW.begin(), processNameW.end());
 				std::string processNameALower = processNameA;
 				std::transform(processNameALower.begin(), processNameALower.end(), processNameALower.begin(), [](unsigned char c) { return std::tolower(c); });
-				if (processNameLower == processNameALower)
+				if (processNameLower == processNameALower || processNameALower.find(processNameLower) != std::string::npos)
 				{
 					HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, entry.th32ProcessID);
 					if (hProcess == NULL)
