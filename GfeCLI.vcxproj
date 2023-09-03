@@ -169,11 +169,11 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="$(ProjectDir)\src\GfeSDKWrapper.cpp" />
-    <ClCompile Include="$(ProjectDir)\src\GfeCLI.cpp" />
+    <ClCompile Include="src\Gfe.cpp" />
+    <ClCompile Include="src\Program.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="$(ProjectDir)\src\GfeSDKWrapper.hpp" />
+    <ClInclude Include="src\Gfe.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

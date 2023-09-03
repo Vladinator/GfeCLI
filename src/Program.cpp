@@ -1,5 +1,3 @@
-//#define USE_PROMISES
-
 #pragma warning(disable: 4244)
 
 #include <csignal>
@@ -18,9 +16,19 @@
 #include <tlhelp32.h>
 #include <Psapi.h>
 
-#include "GfeSDKWrapper.hpp"
+#include "Gfe.hpp"
 
-GfeSdkWrapper gfeSdkWrapper;
+Gfe gfe;
+
+void log(const std::string& str)
+{
+	std::cout << str << std::endl;
+}
+
+void log(const std::wstring& str)
+{
+	std::wcout << str << std::endl;
+}
 
 std::string wcharToString(wchar_t* text)
 {
@@ -92,11 +100,6 @@ public:
 				i++;
 			}
 		}
-#ifdef _DEBUG
-		processName = "wow";
-		highlightTime = "00:00:10";
-		offsetTime = "10";
-#endif
 		if (!processName.empty())
 		{
 			processExists = FindProcess();
@@ -182,16 +185,6 @@ private:
 
 };
 
-void log(const std::string& str)
-{
-	std::cout << str << std::endl;
-}
-
-void log(const std::wstring& str)
-{
-	std::wcout << str << std::endl;
-}
-
 struct HighlightsDataHolder
 {
 	std::string id;
@@ -211,7 +204,6 @@ struct HighlightsData
 };
 
 HighlightsData highlight;
-
 std::string groupId = "GROUP_1";
 
 int open(const std::string& name, const std::string& targetPath, int targetPid)
@@ -237,43 +229,36 @@ int open(const std::string& name, const std::string& targetPath, int targetPid)
 	highlight.highlights[0].nameTable = new GfeSDK::NVGSDK_LocalizedPair[1];
 	highlight.highlights[0].nameTable[0] = highlight.highlightsData[0].namePairs[0];
 	highlight.highlights[0].nameTableSize = 1;
-	return gfeSdkWrapper.Init(highlight.gameName.c_str(), highlight.defaultLocale.c_str(), &highlight.highlights[0], highlight.highlights.size(), targetPath.c_str(), targetPid);
+	return gfe.Init(highlight.gameName.c_str(), highlight.defaultLocale.c_str(), &highlight.highlights[0], highlight.highlights.size(), targetPath.c_str(), targetPid);
 }
 
 int save(int duration, int offset)
 {
-	if (duration + offset > MAX_HIGHLIGHT_DURATION)
+	if (offset > MAX_HIGHLIGHT_DURATION)
+	{
+		offset = MAX_HIGHLIGHT_DURATION;
+	}
+	if (duration > MAX_HIGHLIGHT_DURATION)
 	{
 		duration = MAX_HIGHLIGHT_DURATION;
-		offset = 0;
 	}
-	highlight.highlightsData[0].startDelta = (duration + offset) * -1000;
+	int startDelta = duration + offset;
+	if (startDelta >= MAX_HIGHLIGHT_DURATION)
+	{
+		startDelta -= startDelta - MAX_HIGHLIGHT_DURATION;
+		offset = MAX_HIGHLIGHT_DURATION - duration;
+	}
+	highlight.highlightsData[0].startDelta = startDelta * -1000;
 	highlight.highlightsData[0].endDelta = offset * -1000;
-#ifdef USE_PROMISES
-	int result;
-	result = gfeSdkWrapper.OnOpenGroup(groupId);
-	if (result != 1)
-	{
-		return result;
-	}
-	result = gfeSdkWrapper.OnSaveVideo(highlight.highlightsData[0].id, groupId, highlight.highlightsData[0].startDelta, highlight.highlightsData[0].endDelta);
-	if (result != 1)
-	{
-		return result;
-	}
-	gfeSdkWrapper.OnCloseGroup(groupId, true);
-	return result;
-#else
-	(std::async([&]() { gfeSdkWrapper.OnOpenGroup(groupId); })).wait();
-	(std::async([&]() { gfeSdkWrapper.OnSaveVideo(highlight.highlightsData[0].id, groupId, highlight.highlightsData[0].startDelta, highlight.highlightsData[0].endDelta); })).wait();
-	(std::async([&]() { gfeSdkWrapper.OnCloseGroup(groupId, true); })).wait();
+	(std::async([&]() { gfe.OnOpenGroup(groupId); })).wait();
+	(std::async([&]() { gfe.OnSaveVideo(highlight.highlightsData[0].id, groupId, highlight.highlightsData[0].startDelta, highlight.highlightsData[0].endDelta); })).wait();
+	(std::async([&]() { gfe.OnCloseGroup(groupId, true); })).wait();
 	return 1;
-#endif
 }
 
 void close()
 {
-	gfeSdkWrapper.DeInit();
+	gfe.DeInit();
 }
 
 void signalHandler(int signal)

@@ -15,16 +15,16 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="GfeCLI.cpp">
+    <ClCompile Include="src\Gfe.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GfeSDKWrapper.cpp">
+    <ClCompile Include="src\Program.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="GfeSDKWrapper.hpp">
-      <Filter>Source Files</Filter>
+    <ClInclude Include="src\Gfe.hpp">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
