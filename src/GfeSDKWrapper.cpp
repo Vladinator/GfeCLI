@@ -1,3 +1,5 @@
+//#define USE_PROMISES
+
 #include <future>
 #include <Windows.h>
 
@@ -203,6 +205,7 @@ int GfeSdkWrapper::OnOpenGroup(std::string const& id)
 	GfeSDK::HighlightOpenGroupParams params;
 	params.groupId = id;
 	params.groupDescriptionLocaleTable["en-US"] = id;
+#ifdef USE_PROMISES
 	std::promise<void> promise;
 	std::future<void> future = promise.get_future();
 	int result = 0;
@@ -215,6 +218,14 @@ int GfeSdkWrapper::OnOpenGroup(std::string const& id)
 	);
 	future.wait_for(asyncTimeout);
 	return result;
+#else
+	m_highlights->OpenGroupAsync(params, [this](GfeSDK::NVGSDK_RetCode rc, void*)
+		{
+			UpdateLastResultString(rc);
+		}
+	);
+	return 1;
+#endif
 }
 
 int GfeSdkWrapper::OnCloseGroup(std::string const& id, bool destroy)
@@ -226,6 +237,7 @@ int GfeSdkWrapper::OnCloseGroup(std::string const& id, bool destroy)
 	GfeSDK::HighlightCloseGroupParams params;
 	params.groupId = id;
 	params.destroyHighlights = destroy;
+#ifdef USE_PROMISES
 	std::promise<void> promise;
 	std::future<void> future = promise.get_future();
 	int result = 0;
@@ -238,6 +250,14 @@ int GfeSdkWrapper::OnCloseGroup(std::string const& id, bool destroy)
 	);
 	future.wait_for(asyncTimeout);
 	return result;
+#else
+	m_highlights->CloseGroupAsync(params, [this](GfeSDK::NVGSDK_RetCode rc, void*)
+		{
+			UpdateLastResultString(rc);
+		}
+	);
+	return 1;
+#endif
 }
 
 //int GfeSdkWrapper::OnSaveScreenshot(std::string const& highlightId, std::string const& groupId)
@@ -266,6 +286,7 @@ int GfeSdkWrapper::OnSaveVideo(std::string const& highlightId, std::string const
 	params.endDelta = endDelta;
 	params.groupId = groupId;
 	params.highlightId = highlightId;
+#ifdef USE_PROMISES
 	std::promise<void> promise;
 	std::future<void> future = promise.get_future();
 	int result = 0;
@@ -278,6 +299,14 @@ int GfeSdkWrapper::OnSaveVideo(std::string const& highlightId, std::string const
 	);
 	future.wait_for(asyncTimeout);
 	return result;
+#else
+	m_highlights->SetVideoHighlightAsync(params, [this](GfeSDK::NVGSDK_RetCode rc, void*)
+		{
+			UpdateLastResultString(rc);
+		}
+	);
+	return 1;
+#endif
 }
 
 //int GfeSdkWrapper::OnGetNumHighlights(std::string const& groupId, GfeSDK::NVGSDK_HighlightSignificance sigFilter, GfeSDK::NVGSDK_HighlightType tagFilter)

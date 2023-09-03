@@ -1,3 +1,5 @@
+//#define USE_PROMISES
+
 #pragma warning(disable: 4244)
 
 #include <csignal>
@@ -91,9 +93,9 @@ public:
 			}
 		}
 #ifdef _DEBUG
-		processName = "chrome";
-		highlightTime = "00:00:30";
-		offsetTime = "65";
+		processName = "wow";
+		highlightTime = "00:00:10";
+		offsetTime = "10";
 #endif
 		if (!processName.empty())
 		{
@@ -253,9 +255,11 @@ int save(int duration, int offset)
 		duration = MAX_HIGHLIGHT_DURATION;
 		offset = 0;
 	}
-	highlight.highlightsData[0].startDelta = duration * -1000;
+	highlight.highlightsData[0].startDelta = (duration + offset) * -1000;
 	highlight.highlightsData[0].endDelta = offset * -1000;
-	int result = gfeSdkWrapper.OnOpenGroup(groupId);
+#ifdef USE_PROMISES
+	int result;
+	result = gfeSdkWrapper.OnOpenGroup(groupId);
 	if (result != 1)
 	{
 		return result;
@@ -267,6 +271,12 @@ int save(int duration, int offset)
 	}
 	gfeSdkWrapper.OnCloseGroup(groupId, true);
 	return result;
+#else
+	(std::async([&]() { gfeSdkWrapper.OnOpenGroup(groupId); })).wait();
+	(std::async([&]() { gfeSdkWrapper.OnSaveVideo(highlight.highlightsData[0].id, groupId, highlight.highlightsData[0].startDelta, highlight.highlightsData[0].endDelta); })).wait();
+	(std::async([&]() { gfeSdkWrapper.OnCloseGroup(groupId, true); })).wait();
+	return 1;
+#endif
 }
 
 void close()
@@ -320,9 +330,10 @@ int main(const int argc, const char* argv[])
 	if (result == 1)
 	{
 		result = save(args.highlightDuration, args.offsetDuration);
-		int startFrom = highlight.highlightsData[0].endDelta;
-		int endAt = highlight.highlightsData[0].startDelta - startFrom;
-		std::string rangeText = msTimeToString(args.highlightDuration * 1000) + " [-" + msTimeToString(startFrom) + ", -" + msTimeToString(endAt) + "]";
+		int startFrom = highlight.highlightsData[0].startDelta;
+		int endAt = highlight.highlightsData[0].endDelta;
+		int duration = startFrom - endAt;
+		std::string rangeText = msTimeToString(duration) + " [-" + msTimeToString(startFrom) + ", -" + msTimeToString(endAt) + "]";
 		if (result == 1)
 		{
 			code = EXIT_SUCCESS;
