@@ -1,22 +1,22 @@
+#include <future>
 #include <Windows.h>
 
 #include "GfeSDKWrapper.hpp"
 
-char g_logBuffer[512];
+const std::chrono::milliseconds asyncTimeout(5000);
 
-void dbgprint(const char* fmt, ...)
+char logBuffer[512];
+
+void log(const char* fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
-	vsprintf_s(g_logBuffer, sizeof(g_logBuffer) / sizeof(g_logBuffer[0]), fmt, args);
-	printf(g_logBuffer);
-	printf("\n");
-	OutputDebugStringA(g_logBuffer);
+	vsprintf_s(logBuffer, sizeof(logBuffer) / sizeof(logBuffer[0]), fmt, args);
+	printf("%s\n", logBuffer);
+	OutputDebugStringA(logBuffer);
 	OutputDebugStringA("\n");
 	va_end(args);
 }
-
-#define LOG(fmt, ...) dbgprint(fmt, __VA_ARGS__)
 
 static std::wstring permissionToStringW(GfeSDK::NVGSDK_Permission p)
 {
@@ -33,11 +33,15 @@ static std::wstring permissionToStringW(GfeSDK::NVGSDK_Permission p)
 	}
 }
 
-GfeSdkWrapper::GfeSdkWrapper() : m_currentPermission(permissionToStringW(GfeSDK::NVGSDK_PERMISSION_MUST_ASK))
+GfeSdkWrapper::GfeSdkWrapper() :
+	m_currentPermission(permissionToStringW(GfeSDK::NVGSDK_PERMISSION_MUST_ASK)),
+	m_lastOverlayEvent(L""),
+	m_lastResult(L""),
+	m_lastQueryResult(L"")
 {
 }
 
-void GfeSdkWrapper::Init(char const* gameName, char const* defaultLocale, GfeSDK::NVGSDK_Highlight* highlights, size_t numHighlights, char const* targetPath, int targetPid)
+int GfeSdkWrapper::Init(char const* gameName, char const* defaultLocale, GfeSDK::NVGSDK_Highlight* highlights, size_t numHighlights, char const* targetPath, int targetPid)
 {
 	using namespace std::placeholders;
 
@@ -62,36 +66,36 @@ void GfeSdkWrapper::Init(char const* gameName, char const* defaultLocale, GfeSDK
 
 	if (GfeSDK::NVGSDK_SUCCEEDED(response.returnCode))
 	{
-		LOG("Success: %s", GfeSDK::NVGSDK_RetCodeToString(response.returnCode));
-		LOG("PC is running GFE version %s", response.nvidiaGfeVersion.c_str());
-		LOG("PC is running GfeSDK version %d.%d", response.versionMajor, response.versionMinor);
+		log("Success: %s", GfeSDK::NVGSDK_RetCodeToString(response.returnCode));
+		log("PC is running GFE version %s", response.nvidiaGfeVersion.c_str());
+		log("PC is running GfeSDK version %d.%d", response.versionMajor, response.versionMinor);
 		switch (response.returnCode)
 		{
 		case GfeSDK::NVGSDK_SUCCESS_VERSION_OLD_GFE:
-			LOG("Compatible, but the user should update to the latest version of GFE.");
+			log("Compatible, but the user should update to the latest version of GFE.");
 			break;
 		case GfeSDK::NVGSDK_SUCCESS_VERSION_OLD_SDK:
-			LOG("Compatible, but this application should update to a more recent version of GfeSDK.");
+			log("Compatible, but this application should update to a more recent version of GfeSDK.");
 			break;
 		}
 	}
 	else
 	{
-		LOG("Failure: %s", GfeSDK::NVGSDK_RetCodeToString(response.returnCode));
+		log("Failure: %s", GfeSDK::NVGSDK_RetCodeToString(response.returnCode));
 		switch (response.returnCode)
 		{
 		case GfeSDK::NVGSDK_ERR_SDK_VERSION:
-			LOG("This application uses a version of GfeSDK that is too old to communicate with GFE.");
-			LOG("PC is running GFE version %s", response.nvidiaGfeVersion.c_str());
-			LOG("PC is running GfeSDK version %d.%d", response.versionMajor, response.versionMinor);
+			log("This application uses a version of GfeSDK that is too old to communicate with GFE.");
+			log("PC is running GFE version %s", response.nvidiaGfeVersion.c_str());
+			log("PC is running GfeSDK version %d.%d", response.versionMajor, response.versionMinor);
 			break;
 		case GfeSDK::NVGSDK_SUCCESS_VERSION_OLD_SDK:
-			LOG("This user is running a version of GFE that is too old to communicate with applications GfeSDK.");
-			LOG("PC is running GFE version %s", response.nvidiaGfeVersion.c_str());
-			LOG("PC is running GfeSDK version %d.%d", response.versionMajor, response.versionMinor);
+			log("This user is running a version of GFE that is too old to communicate with applications GfeSDK.");
+			log("PC is running GFE version %s", response.nvidiaGfeVersion.c_str());
+			log("PC is running GfeSDK version %d.%d", response.versionMajor, response.versionMinor);
 			break;
 		}
-		return;
+		return 3;
 	}
 
 	m_gfesdk.reset(gfesdkCore);
@@ -114,20 +118,27 @@ void GfeSdkWrapper::Init(char const* gameName, char const* defaultLocale, GfeSDK
 
 	if (!requestPermissionsParams.scopes.empty())
 	{
-		m_gfesdk->RequestPermissionsAsync(requestPermissionsParams, [this, defaultLocale, highlights, numHighlights](GfeSDK::NVGSDK_RetCode rc, void* cbContext)
+		std::promise<void> promise;
+		std::future<void> future = promise.get_future();
+		int result = 0;
+		m_gfesdk->RequestPermissionsAsync(requestPermissionsParams, [this, defaultLocale, highlights, numHighlights, &promise, &result](GfeSDK::NVGSDK_RetCode rc, void* cbContext)
 			{
 				UpdateLastResultString(rc);
+				result = 2;
 				if (GfeSDK::NVGSDK_SUCCEEDED(rc))
 				{
 					ConfigureHighlights(defaultLocale, highlights, numHighlights);
+					result = 1;
 				}
+				promise.set_value();
 			}
 		);
+		future.wait_for(asyncTimeout);
+		return result;
 	}
-	else
-	{
-		ConfigureHighlights(defaultLocale, highlights, numHighlights);
-	}
+
+	ConfigureHighlights(defaultLocale, highlights, numHighlights);
+	return 1;
 }
 
 void GfeSdkWrapper::DeInit()
@@ -136,14 +147,14 @@ void GfeSdkWrapper::DeInit()
 	delete gfesdkCore;
 }
 
-void GfeSdkWrapper::OnTick(void)
-{
-	if (!m_gfesdk)
-	{
-		return;
-	}
-	m_gfesdk->Poll();
-}
+//void GfeSdkWrapper::OnTick(void)
+//{
+//	if (!m_gfesdk)
+//	{
+//		return;
+//	}
+//	m_gfesdk->Poll();
+//}
 
 void GfeSdkWrapper::OnNotification(GfeSDK::NVGSDK_NotificationType type, GfeSDK::NotificationBase const& notification)
 {
@@ -183,154 +194,209 @@ void GfeSdkWrapper::OnNotification(GfeSDK::NVGSDK_NotificationType type, GfeSDK:
 	}
 }
 
-void GfeSdkWrapper::OnOpenGroup(std::string const& id)
+int GfeSdkWrapper::OnOpenGroup(std::string const& id)
 {
 	if (!m_highlights)
 	{
-		return;
+		return 2;
 	}
 	GfeSDK::HighlightOpenGroupParams params;
 	params.groupId = id;
 	params.groupDescriptionLocaleTable["en-US"] = id;
-	m_highlights->OpenGroupAsync(params, [this](GfeSDK::NVGSDK_RetCode rc, void*)
+	std::promise<void> promise;
+	std::future<void> future = promise.get_future();
+	int result = 0;
+	m_highlights->OpenGroupAsync(params, [this, &promise, &result](GfeSDK::NVGSDK_RetCode rc, void*)
 		{
 			UpdateLastResultString(rc);
+			result = 1;
+			promise.set_value();
 		}
 	);
+	future.wait_for(asyncTimeout);
+	return result;
 }
 
-void GfeSdkWrapper::OnCloseGroup(std::string const& id, bool destroy)
+int GfeSdkWrapper::OnCloseGroup(std::string const& id, bool destroy)
 {
 	if (!m_highlights)
 	{
-		return;
+		return 2;
 	}
 	GfeSDK::HighlightCloseGroupParams params;
 	params.groupId = id;
 	params.destroyHighlights = destroy;
-	m_highlights->CloseGroupAsync(params, [this](GfeSDK::NVGSDK_RetCode rc, void*)
+	std::promise<void> promise;
+	std::future<void> future = promise.get_future();
+	int result = 0;
+	m_highlights->CloseGroupAsync(params, [this, &promise, &result](GfeSDK::NVGSDK_RetCode rc, void*)
 		{
 			UpdateLastResultString(rc);
+			result = 1;
+			promise.set_value();
 		}
 	);
-#ifdef DOXYGEN
-	GfeSDK::HighlightCloseGroupParams params = { "GROUP_1" };
-	m_highlights->CloseGroupAsync(params);
-#endif
+	future.wait_for(asyncTimeout);
+	return result;
 }
 
-void GfeSdkWrapper::OnSaveScreenshot(std::string const& highlightId, std::string const& groupId)
-{
-	GfeSDK::ScreenshotHighlightParams params;
-	params.groupId = groupId;
-	params.highlightId = highlightId;
-	m_highlights->SetScreenshotHighlightAsync(params, [this](GfeSDK::NVGSDK_RetCode rc, void*)
-		{
-			UpdateLastResultString(rc);
-		}
-	);
-}
+//int GfeSdkWrapper::OnSaveScreenshot(std::string const& highlightId, std::string const& groupId)
+//{
+//	GfeSDK::ScreenshotHighlightParams params;
+//	params.groupId = groupId;
+//	params.highlightId = highlightId;
+//	std::promise<void> promise;
+//	std::future<void> future = promise.get_future();
+//	int result = 0;
+//	m_highlights->SetScreenshotHighlightAsync(params, [this, &promise, &result](GfeSDK::NVGSDK_RetCode rc, void*)
+//		{
+//			UpdateLastResultString(rc);
+//			result = 1;
+//			promise.set_value();
+//		}
+//	);
+//	future.wait_for(asyncTimeout);
+//	return result;
+//}
 
-void GfeSdkWrapper::OnSaveVideo(std::string const& highlightId, std::string const& groupId, int startDelta, int endDelta)
+int GfeSdkWrapper::OnSaveVideo(std::string const& highlightId, std::string const& groupId, int startDelta, int endDelta)
 {
 	GfeSDK::VideoHighlightParams params;
 	params.startDelta = startDelta;
 	params.endDelta = endDelta;
 	params.groupId = groupId;
 	params.highlightId = highlightId;
-	m_highlights->SetVideoHighlightAsync(params, [this](GfeSDK::NVGSDK_RetCode rc, void*)
+	std::promise<void> promise;
+	std::future<void> future = promise.get_future();
+	int result = 0;
+	m_highlights->SetVideoHighlightAsync(params, [this, &promise, &result](GfeSDK::NVGSDK_RetCode rc, void*)
 		{
 			UpdateLastResultString(rc);
+			result = 1;
+			promise.set_value();
 		}
 	);
+	future.wait_for(asyncTimeout);
+	return result;
 }
 
-void GfeSdkWrapper::OnGetNumHighlights(std::string const& groupId, GfeSDK::NVGSDK_HighlightSignificance sigFilter, GfeSDK::NVGSDK_HighlightType tagFilter)
-{
-	GfeSDK::GroupView v;
-	v.groupId = groupId;
-	v.significanceFilter = sigFilter;
-	v.tagsFilter = tagFilter;
-	m_highlights->GetNumberOfHighlightsAsync(v, [this](GfeSDK::NVGSDK_RetCode rc, GfeSDK::GetNumberOfHighlightsResponse const* response, void*)
-		{
-			UpdateLastResultString(rc);
-			if (GfeSDK::NVGSDK_SUCCEEDED(rc))
-			{
-				m_lastQueryResult = std::to_wstring(response->numHighlights);
-			}
-		}
-	);
-}
+//int GfeSdkWrapper::OnGetNumHighlights(std::string const& groupId, GfeSDK::NVGSDK_HighlightSignificance sigFilter, GfeSDK::NVGSDK_HighlightType tagFilter)
+//{
+//	GfeSDK::GroupView v;
+//	v.groupId = groupId;
+//	v.significanceFilter = sigFilter;
+//	v.tagsFilter = tagFilter;
+//	std::promise<void> promise;
+//	std::future<void> future = promise.get_future();
+//	int result = 0;
+//	m_highlights->GetNumberOfHighlightsAsync(v, [this](GfeSDK::NVGSDK_RetCode rc, GfeSDK::GetNumberOfHighlightsResponse const* response, void*)
+//		{
+//			UpdateLastResultString(rc);
+//			result = 2;
+//			if (GfeSDK::NVGSDK_SUCCEEDED(rc))
+//			{
+//				m_lastQueryResult = std::to_wstring(response->numHighlights);
+//				result = 1;
+//			}
+//			promise.set_value();
+//		}
+//	);
+//	future.wait_for(asyncTimeout);
+//	return result;
+//}
 
-void GfeSdkWrapper::OnOpenSummary(char const* groupIds[], size_t numGroups, GfeSDK::NVGSDK_HighlightSignificance sigFilter, GfeSDK::NVGSDK_HighlightType tagFilter)
-{
-	GfeSDK::SummaryParams params;
-	for (size_t i = 0; i < numGroups; ++i)
-	{
-		GfeSDK::GroupView v;
-		v.groupId = groupIds[i];
-		v.significanceFilter = sigFilter;
-		v.tagsFilter = tagFilter;
-		params.groupViews.push_back(v);
-	}
-	m_highlights->OpenSummaryAsync(params, [this](GfeSDK::NVGSDK_RetCode rc, void*)
-		{
-			UpdateLastResultString(rc);
-		}
-	);
-}
+//int GfeSdkWrapper::OnOpenSummary(char const* groupIds[], size_t numGroups, GfeSDK::NVGSDK_HighlightSignificance sigFilter, GfeSDK::NVGSDK_HighlightType tagFilter)
+//{
+//	GfeSDK::SummaryParams params;
+//	for (size_t i = 0; i < numGroups; ++i)
+//	{
+//		GfeSDK::GroupView v;
+//		v.groupId = groupIds[i];
+//		v.significanceFilter = sigFilter;
+//		v.tagsFilter = tagFilter;
+//		params.groupViews.push_back(v);
+//	}
+//	std::promise<void> promise;
+//	std::future<void> future = promise.get_future();
+//	int result = 0;
+//	m_highlights->OpenSummaryAsync(params, [this, &promise, &result](GfeSDK::NVGSDK_RetCode rc, void*)
+//		{
+//			UpdateLastResultString(rc);
+//			result = 1;
+//			promise.set_value();
+//		}
+//	);
+//	future.wait_for(asyncTimeout);
+//	return result;
+//}
 
-void GfeSdkWrapper::OnRequestLanguage(void)
-{
-	m_gfesdk->GetUILanguageAsync([this](GfeSDK::NVGSDK_RetCode rc, GfeSDK::GetUILanguageResponse const* response, void* context)
-		{
-			GfeSdkWrapper* thiz = reinterpret_cast<GfeSdkWrapper*>(context);
-			UpdateLastResultString(rc);
-			if (GfeSDK::NVGSDK_SUCCEEDED(rc))
-			{
-				m_lastQueryResult = m_converter.from_bytes(response->cultureCode);
-			}
-		},
-		this
-	);
-}
+//int GfeSdkWrapper::OnRequestLanguage(void)
+//{
+//	std::promise<void> promise;
+//	std::future<void> future = promise.get_future();
+//	int result = 0;
+//	m_gfesdk->GetUILanguageAsync([this, &promise, &result](GfeSDK::NVGSDK_RetCode rc, GfeSDK::GetUILanguageResponse const* response, void* context)
+//		{
+//			GfeSdkWrapper* thiz = reinterpret_cast<GfeSdkWrapper*>(context);
+//			UpdateLastResultString(rc);
+//			result = 2;
+//			if (GfeSDK::NVGSDK_SUCCEEDED(rc))
+//			{
+//				m_lastQueryResult = m_converter.from_bytes(response->cultureCode);
+//				result = 1;
+//			}
+//			promise.set_value();
+//		},
+//		this
+//	);
+//	future.wait_for(asyncTimeout);
+//	return result;
+//}
 
-void GfeSdkWrapper::OnRequestUserSettings(void)
-{
-	m_highlights->GetUserSettingsAsync([this](GfeSDK::NVGSDK_RetCode rc, GfeSDK::GetUserSettingsResponse const* response, void*)
-		{
-			UpdateLastResultString(rc);
-			m_lastQueryResult = L"";
-			if (GfeSDK::NVGSDK_SUCCEEDED(rc))
-			{
-				for (auto it = response->highlightSettings.begin(); it != response->highlightSettings.end(); ++it)
-				{
-					m_lastQueryResult += L"\n" + m_converter.from_bytes(it->highlightId) + (it->enabled ? L": ON" : L": OFF");
-				}
-			}
-		}
-	);
-}
+//int GfeSdkWrapper::OnRequestUserSettings(void)
+//{
+//	std::promise<void> promise;
+//	std::future<void> future = promise.get_future();
+//	int result = 0;
+//	m_highlights->GetUserSettingsAsync([this, &promise, &result](GfeSDK::NVGSDK_RetCode rc, GfeSDK::GetUserSettingsResponse const* response, void*)
+//		{
+//			UpdateLastResultString(rc);
+//			m_lastQueryResult = L"";
+//			result = 2;
+//			if (GfeSDK::NVGSDK_SUCCEEDED(rc))
+//			{
+//				for (auto it = response->highlightSettings.begin(); it != response->highlightSettings.end(); ++it)
+//				{
+//					m_lastQueryResult += L"\n" + m_converter.from_bytes(it->highlightId) + (it->enabled ? L": ON" : L": OFF");
+//				}
+//				result = 1;
+//			}
+//			promise.set_value();
+//		}
+//	);
+//	future.wait_for(asyncTimeout);
+//	return result;
+//}
 
-wchar_t const* GfeSdkWrapper::GetCurrentPermissionStr(void)
-{
-	return m_currentPermission.c_str();
-}
+//std::wstring const& GfeSdkWrapper::GetCurrentPermissionStr(void) const
+//{
+//	return m_currentPermission;
+//}
 
-wchar_t const* GfeSdkWrapper::GetLastOverlayEvent(void)
-{
-	return m_lastOverlayEvent.c_str();
-}
+//std::wstring const& GfeSdkWrapper::GetLastOverlayEvent(void) const
+//{
+//	return m_lastOverlayEvent;
+//}
 
-wchar_t const* GfeSdkWrapper::GetLastResult(void)
-{
-	return m_lastResult.c_str();
-}
+//std::wstring const& GfeSdkWrapper::GetLastResult(void) const
+//{
+//	return m_lastResult;
+//}
 
-wchar_t const* GfeSdkWrapper::GetLastQueryResult(void)
-{
-	return m_lastQueryResult.c_str();
-}
+//std::wstring const& GfeSdkWrapper::GetLastQueryResult(void) const
+//{
+//	return m_lastQueryResult;
+//}
 
 void GfeSdkWrapper::ConfigureHighlights(char const* defaultLocale, GfeSDK::NVGSDK_Highlight* highlights, size_t numHighlights)
 {

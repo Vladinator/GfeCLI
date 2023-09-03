@@ -1,6 +1,9 @@
 #pragma warning(disable: 4244)
 
+#include <csignal>
+#include <cstdlib>
 #include <iostream>
+#include <iomanip>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -29,6 +32,24 @@ std::string wcharToString(wchar_t* text)
 	return str;
 }
 
+std::string msTimeToString(int milliseconds)
+{
+	if (milliseconds < 0)
+	{
+		milliseconds = -milliseconds;
+	}
+	int seconds = milliseconds / 1000;
+	int minutes = seconds / 60;
+	int hours = minutes / 60;
+	seconds %= 60;
+	minutes %= 60;
+	std::ostringstream formattedTime;
+	formattedTime << std::setfill('0') << std::setw(2) << hours << ":"
+		<< std::setfill('0') << std::setw(2) << minutes << ":"
+		<< std::setfill('0') << std::setw(2) << seconds;
+	return formattedTime.str();
+}
+
 constexpr auto MAX_HIGHLIGHT_DURATION = 1200;
 
 class Arguments
@@ -39,13 +60,16 @@ public:
 	bool valid = false;
 	int processExists = -1;
 	int durationExists = -1;
+	int offsetExists = -1;
 	std::string processName;
 	std::string processPath;
 	int processPid = 0;
 	std::string highlightTime;
 	int highlightDuration = 0;
+	std::string offsetTime;
+	int offsetDuration = 0;
 
-	Arguments(int argc, char* argv[])
+	Arguments(const int argc, const char* argv[])
 	{
 		for (int i = 1; i < argc; ++i)
 		{
@@ -60,17 +84,33 @@ public:
 				highlightTime = argv[i + 1];
 				i++;
 			}
+			else if (arg == "--offset" && i + 1 < argc)
+			{
+				offsetTime = argv[i + 1];
+				i++;
+			}
 		}
+#ifdef _DEBUG
+		processName = "chrome";
+		highlightTime = "00:00:30";
+		offsetTime = "65";
+#endif
 		if (!processName.empty())
 		{
 			processExists = FindProcess();
 		}
 		if (!highlightTime.empty())
 		{
-			durationExists = ExtractDuration();
+			durationExists = ParseTimeStrInto(highlightTime, highlightDuration);
+		}
+		if (!offsetTime.empty())
+		{
+			offsetExists = ParseTimeStrInto(offsetTime, offsetDuration);
 		}
 		valid = processExists == 0 && durationExists == 0;
 	}
+
+private:
 
 	int FindProcess()
 	{
@@ -118,28 +158,36 @@ public:
 		return result;
 	}
 
-	int ExtractDuration()
+	int ParseTimeStrInto(std::string& timeStr, int& intoVar)
 	{
-		int result = 1;
 		int hours, minutes, seconds;
 		char colon;
-		std::istringstream iss(highlightTime);
+		std::istringstream iss(timeStr);
 		if (iss >> hours >> colon >> minutes >> colon >> seconds)
 		{
-			highlightDuration = hours * 3600 + minutes * 60 + seconds;
-			if (highlightDuration > 0)
-			{
-				result = 0;
-			}
+			intoVar = hours * 3600 + minutes * 60 + seconds;
+			return 0;
 		}
-		return result;
+		iss.clear();
+		iss.seekg(0);
+		if (iss >> seconds)
+		{
+			intoVar = seconds;
+			return 0;
+		}
+		return 1;
 	}
 
 };
 
-void log(std::string str)
+void log(const std::string& str)
 {
 	std::cout << str << std::endl;
+}
+
+void log(const std::wstring& str)
+{
+	std::wcout << str << std::endl;
 }
 
 struct HighlightsDataHolder
@@ -162,9 +210,9 @@ struct HighlightsData
 
 HighlightsData highlight;
 
-std::string groupId = "GROUP";
+std::string groupId = "GROUP_1";
 
-void open(std::string name, std::string targetPath, int targetPid)
+int open(const std::string& name, const std::string& targetPath, int targetPid)
 {
 	std::string locale = "en-us";
 	std::string label = "Highlight";
@@ -187,21 +235,38 @@ void open(std::string name, std::string targetPath, int targetPid)
 	highlight.highlights[0].nameTable = new GfeSDK::NVGSDK_LocalizedPair[1];
 	highlight.highlights[0].nameTable[0] = highlight.highlightsData[0].namePairs[0];
 	highlight.highlights[0].nameTableSize = 1;
-	(std::async([&]() { gfeSdkWrapper.Init(highlight.gameName.c_str(), highlight.defaultLocale.c_str(), &highlight.highlights[0], highlight.highlights.size(), targetPath.c_str(), targetPid); })).wait();
+	return gfeSdkWrapper.Init(highlight.gameName.c_str(), highlight.defaultLocale.c_str(), &highlight.highlights[0], highlight.highlights.size(), targetPath.c_str(), targetPid);
 }
 
-void save(int duration)
+int save(int duration, int offset)
 {
 	if (duration > MAX_HIGHLIGHT_DURATION)
 	{
 		duration = MAX_HIGHLIGHT_DURATION;
 	}
-	// const char* groupIds[] = { groupId.c_str() };
+	if (offset > MAX_HIGHLIGHT_DURATION)
+	{
+		offset = MAX_HIGHLIGHT_DURATION;
+	}
+	if (duration + offset > MAX_HIGHLIGHT_DURATION)
+	{
+		duration = MAX_HIGHLIGHT_DURATION;
+		offset = 0;
+	}
 	highlight.highlightsData[0].startDelta = duration * -1000;
-	(std::async([&]() { gfeSdkWrapper.OnOpenGroup(groupId); })).wait();
-	(std::async([&]() { gfeSdkWrapper.OnSaveVideo(highlight.highlightsData[0].id, groupId, highlight.highlightsData[0].startDelta, highlight.highlightsData[0].endDelta); })).wait();
-	// (std::async([&]() { gfeSdkWrapper.OnOpenSummary(groupIds, 1, highlight.highlights[0].significance, highlight.highlights[0].highlightTags); })).wait();
-	(std::async([&]() { gfeSdkWrapper.OnCloseGroup(groupId, true); })).wait();
+	highlight.highlightsData[0].endDelta = offset * -1000;
+	int result = gfeSdkWrapper.OnOpenGroup(groupId);
+	if (result != 1)
+	{
+		return result;
+	}
+	result = gfeSdkWrapper.OnSaveVideo(highlight.highlightsData[0].id, groupId, highlight.highlightsData[0].startDelta, highlight.highlightsData[0].endDelta);
+	if (result != 1)
+	{
+		return result;
+	}
+	gfeSdkWrapper.OnCloseGroup(groupId, true);
+	return result;
 }
 
 void close()
@@ -209,8 +274,19 @@ void close()
 	gfeSdkWrapper.DeInit();
 }
 
-int main(int argc, char* argv[])
+void signalHandler(int signal)
 {
+	if (signal == SIGINT)
+	{
+		log("Aborted by user...");
+		close();
+		exit(EXIT_FAILURE);
+	}
+}
+
+int main(const int argc, const char* argv[])
+{
+	int code = EXIT_FAILURE;
 	Arguments args = Arguments(argc, argv);
 	if (!args.valid)
 	{
@@ -221,19 +297,50 @@ int main(int argc, char* argv[])
 			log("Options:");
 			log("  --process <executable>");
 			log("  --highlight <duration>");
+			log("  --offset <duration>");
 			log("");
-			log("Example:");
+			log("Variables:");
+			log("  executable - the full process name or partial name");
+			log("  duration - HH:MM:SS format or in seconds");
+			log("");
+			log("Examples:");
 			log("  Save highlight of the past 2m 30s");
-			log("  gfecli --process game.exe --highlight 00:02:30");
+			log("    gfecli --process game.exe --highlight 00:02:30");
+			log("  Save highlight of the past 5m but start from 1m ago");
+			log("    gfecli --process game.exe --highlight 00:05:00 --offset 00:01:00");
 		}
 		else
 		{
-			log("gfecli was unable to save highlight for process.");
+			log("Unable to find process or highlight duration.");
 		}
-		return 0;
+		return code;
 	}
-	open("gfecli", args.processPath, args.processPid);
-	save(args.highlightDuration);
+	signal(SIGINT, signalHandler);
+	int result = open("gfecli", args.processPath, args.processPid);
+	if (result == 1)
+	{
+		result = save(args.highlightDuration, args.offsetDuration);
+		int startFrom = highlight.highlightsData[0].endDelta;
+		int endAt = highlight.highlightsData[0].startDelta - startFrom;
+		std::string rangeText = msTimeToString(args.highlightDuration * 1000) + " [-" + msTimeToString(startFrom) + ", -" + msTimeToString(endAt) + "]";
+		if (result == 1)
+		{
+			code = EXIT_SUCCESS;
+			log("Successfully saved highlight. " + rangeText);
+		}
+		else
+		{
+			log("Failed to save highlight. " + rangeText);
+		}
+	}
+	else if (result == 2)
+	{
+		log("Permission denied.");
+	}
+	else if (result != 3)
+	{
+		log("Permission request timed out.");
+	}
 	close();
-	return 0;
+	return code;
 }
