@@ -242,14 +242,6 @@ int open(const std::string& name, const std::string& targetPath, int targetPid)
 
 int save(int duration, int offset)
 {
-	if (duration > MAX_HIGHLIGHT_DURATION)
-	{
-		duration = MAX_HIGHLIGHT_DURATION;
-	}
-	if (offset > MAX_HIGHLIGHT_DURATION)
-	{
-		offset = MAX_HIGHLIGHT_DURATION;
-	}
 	if (duration + offset > MAX_HIGHLIGHT_DURATION)
 	{
 		duration = MAX_HIGHLIGHT_DURATION;
