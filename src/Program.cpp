@@ -340,11 +340,5 @@ int main(const int argc, const char* argv[])
 #endif
 
 #ifndef HAVE_GFESDK
-
-int main(const int argc, const char* argv[])
-{
-	log("You are missing the GfeSDK files. Please see the README.md for instructions.");
-	return EXIT_FAILURE;
-}
-
+#error You are missing the GfeSDK files. Please see the README.md for instructions.
 #endif
