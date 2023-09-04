@@ -1,5 +1,9 @@
 #pragma once
 
+#include "Program.hpp"
+
+#ifdef HAVE_GFESDK
+
 #include <codecvt>
 #include <locale>
 #include <memory>
@@ -33,3 +37,5 @@ private:
 	std::wstring m_lastQueryResult;
 
 };
+
+#endif

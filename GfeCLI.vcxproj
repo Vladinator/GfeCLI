@@ -104,6 +104,17 @@
       <Command>xcopy /Y /D "$(ProjectDir)\lib\x86\GfeSDK.dll" "$(TargetDir)"
 </Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>(echo #pragma once) &gt; "$(ProjectDir)src\Program.hpp"
+if exist "$(ProjectDir)include\gfesdk\bindings\cpp\isdk_cpp_impl.h" (
+  if exist "$(ProjectDir)include\gfesdk\bindings\cpp\highlights\ihighlights_cpp_impl.h" (
+    (echo #define HAVE_GFESDK) &gt;&gt; "$(ProjectDir)src\Program.hpp"
+  )
+)</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>Ensures that the define is proper set depending on GfeSDK availability.</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -127,6 +138,17 @@
       <Command>xcopy /Y /D "$(ProjectDir)\lib\x86\GfeSDK.dll" "$(TargetDir)"
 </Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>(echo #pragma once) &gt; "$(ProjectDir)src\Program.hpp"
+if exist "$(ProjectDir)include\gfesdk\bindings\cpp\isdk_cpp_impl.h" (
+  if exist "$(ProjectDir)include\gfesdk\bindings\cpp\highlights\ihighlights_cpp_impl.h" (
+    (echo #define HAVE_GFESDK) &gt;&gt; "$(ProjectDir)src\Program.hpp"
+  )
+)</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>Ensures that the define is proper set depending on GfeSDK availability.</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -145,6 +167,17 @@
     <PostBuildEvent>
       <Command>xcopy /Y /D "$(ProjectDir)\lib\x64\GfeSDK.dll" "$(TargetDir)"</Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>(echo #pragma once) &gt; "$(ProjectDir)src\Program.hpp"
+if exist "$(ProjectDir)include\gfesdk\bindings\cpp\isdk_cpp_impl.h" (
+  if exist "$(ProjectDir)include\gfesdk\bindings\cpp\highlights\ihighlights_cpp_impl.h" (
+    (echo #define HAVE_GFESDK) &gt;&gt; "$(ProjectDir)src\Program.hpp"
+  )
+)</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>Ensures that the define is proper set depending on GfeSDK availability.</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -167,6 +200,17 @@
     <PostBuildEvent>
       <Command>xcopy /Y /D "$(ProjectDir)\lib\x64\GfeSDK.dll" "$(TargetDir)"</Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>(echo #pragma once) &gt; "$(ProjectDir)src\Program.hpp"
+if exist "$(ProjectDir)include\gfesdk\bindings\cpp\isdk_cpp_impl.h" (
+  if exist "$(ProjectDir)include\gfesdk\bindings\cpp\highlights\ihighlights_cpp_impl.h" (
+    (echo #define HAVE_GFESDK) &gt;&gt; "$(ProjectDir)src\Program.hpp"
+  )
+)</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>Ensures that the define is proper set depending on GfeSDK availability.</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\Gfe.cpp" />
@@ -174,6 +218,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Gfe.hpp" />
+    <ClInclude Include="src\Program.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

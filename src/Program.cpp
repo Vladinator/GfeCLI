@@ -1,11 +1,27 @@
+#include <iostream>
+#include <string>
+
+#include "Program.hpp"
+#include "Gfe.hpp"
+
+void log(const std::string& str)
+{
+	std::cout << str << std::endl;
+}
+
+#ifdef HAVE_GFESDK
+
+void log(const std::wstring& str)
+{
+	std::wcout << str << std::endl;
+}
+
 #pragma warning(disable: 4244)
 
 #include <csignal>
 #include <cstdlib>
-#include <iostream>
 #include <iomanip>
 #include <sstream>
-#include <string>
 #include <vector>
 #include <codecvt>
 #include <future>
@@ -16,19 +32,7 @@
 #include <tlhelp32.h>
 #include <Psapi.h>
 
-#include "Gfe.hpp"
-
 Gfe gfe;
-
-void log(const std::string& str)
-{
-	std::cout << str << std::endl;
-}
-
-void log(const std::wstring& str)
-{
-	std::wcout << str << std::endl;
-}
 
 std::string wcharToString(wchar_t* text)
 {
@@ -332,3 +336,15 @@ int main(const int argc, const char* argv[])
 	close();
 	return code;
 }
+
+#endif
+
+#ifndef HAVE_GFESDK
+
+int main(const int argc, const char* argv[])
+{
+	log("You are missing the GfeSDK files. Please see the README.md for instructions.");
+	return EXIT_FAILURE;
+}
+
+#endif

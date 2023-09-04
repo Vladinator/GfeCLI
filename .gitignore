@@ -1,2 +1,4 @@
 .vs
 build
+include/gfesdk/**
+src/Program.hpp

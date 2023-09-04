@@ -1,7 +1,9 @@
+#include "Gfe.hpp"
+
+#ifdef HAVE_GFESDK
+
 #include <future>
 #include <Windows.h>
-
-#include "Gfe.hpp"
 
 const std::chrono::milliseconds timeout(5000);
 
@@ -252,3 +254,5 @@ void Gfe::UpdateLastResultString(GfeSDK::NVGSDK_RetCode rc)
 {
 	m_lastResult = m_converter.from_bytes(GfeSDK::RetCodeToString(rc));
 }
+
+#endif
