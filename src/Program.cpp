@@ -256,6 +256,7 @@ int save(int duration, int offset)
 	highlight.highlightsData[0].endDelta = offset * -1000;
 	(std::async([&]() { gfe.OnOpenGroup(groupId); })).wait();
 	(std::async([&]() { gfe.OnSaveVideo(highlight.highlightsData[0].id, groupId, highlight.highlightsData[0].startDelta, highlight.highlightsData[0].endDelta); })).wait();
+	std::this_thread::sleep_for(std::chrono::milliseconds(500));
 	(std::async([&]() { gfe.OnCloseGroup(groupId, true); })).wait();
 	return 1;
 }
