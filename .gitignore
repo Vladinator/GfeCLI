@@ -3,3 +3,4 @@ build
 include/gfesdk/**
 !include/gfesdk/.keep
 src/Program.hpp
+*.vcxproj.user
