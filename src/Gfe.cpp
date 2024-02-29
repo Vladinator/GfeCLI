@@ -5,7 +5,8 @@
 #include <future>
 #include <Windows.h>
 
-const std::chrono::milliseconds timeout(5000);
+const std::chrono::milliseconds timeoutAction(10000);
+const std::chrono::milliseconds timeout(250);
 
 char logBuffer[512];
 
@@ -110,23 +111,25 @@ int Gfe::Init(char const* gameName, char const* defaultLocale, GfeSDK::NVGSDK_Hi
 	}
 	if (!requestPermissionsParams.scopes.empty())
 	{
-		std::promise<void> promise;
-		std::future<void> future = promise.get_future();
-		int result = 0;
-		m_gfesdk->RequestPermissionsAsync(requestPermissionsParams, [this, defaultLocale, highlights, numHighlights, &promise, &result](GfeSDK::NVGSDK_RetCode rc, void* cbContext)
+		std::promise<int> promise;
+		std::future<int> future = promise.get_future();
+		m_gfesdk->RequestPermissionsAsync(requestPermissionsParams, [this, &promise, defaultLocale, highlights, numHighlights](GfeSDK::NVGSDK_RetCode rc, void* cbContext)
 			{
 				UpdateLastResultString(rc);
-				result = 2;
-				if (GfeSDK::NVGSDK_SUCCEEDED(rc))
+				if (!GfeSDK::NVGSDK_SUCCEEDED(rc))
 				{
-					ConfigureHighlights(defaultLocale, highlights, numHighlights);
-					result = 1;
+					promise.set_value(2);
+					return;
 				}
-				promise.set_value();
+				ConfigureHighlights(defaultLocale, highlights, numHighlights);
+				promise.set_value(1);
 			}
 		);
-		future.wait_for(timeout);
-		return result;
+		if (future.wait_for(timeoutAction) == std::future_status::ready)
+		{
+			return future.get();
+		}
+		return 0;
 	}
 	ConfigureHighlights(defaultLocale, highlights, numHighlights);
 	return 1;
@@ -185,12 +188,19 @@ int Gfe::OnOpenGroup(std::string const& id)
 	GfeSDK::HighlightOpenGroupParams params;
 	params.groupId = id;
 	params.groupDescriptionLocaleTable["en-US"] = id;
-	m_highlights->OpenGroupAsync(params, [this](GfeSDK::NVGSDK_RetCode rc, void*)
+	std::promise<int> promise;
+	std::future<int> future = promise.get_future();
+	m_highlights->OpenGroupAsync(params, [this, &promise](GfeSDK::NVGSDK_RetCode rc, void*)
 		{
 			UpdateLastResultString(rc);
+			promise.set_value(1);
 		}
 	);
-	return 1;
+	if (future.wait_for(timeout) == std::future_status::ready)
+	{
+		return future.get();
+	}
+	return 0;
 }
 
 int Gfe::OnCloseGroup(std::string const& id, bool destroy)
@@ -202,12 +212,19 @@ int Gfe::OnCloseGroup(std::string const& id, bool destroy)
 	GfeSDK::HighlightCloseGroupParams params;
 	params.groupId = id;
 	params.destroyHighlights = destroy;
-	m_highlights->CloseGroupAsync(params, [this](GfeSDK::NVGSDK_RetCode rc, void*)
+	std::promise<int> promise;
+	std::future<int> future = promise.get_future();
+	m_highlights->CloseGroupAsync(params, [this, &promise](GfeSDK::NVGSDK_RetCode rc, void*)
 		{
 			UpdateLastResultString(rc);
+			promise.set_value(1);
 		}
 	);
-	return 1;
+	if (future.wait_for(timeout) == std::future_status::ready)
+	{
+		return future.get();
+	}
+	return 0;
 }
 
 int Gfe::OnSaveVideo(std::string const& highlightId, std::string const& groupId, int startDelta, int endDelta)
@@ -217,15 +234,22 @@ int Gfe::OnSaveVideo(std::string const& highlightId, std::string const& groupId,
 	params.endDelta = endDelta;
 	params.groupId = groupId;
 	params.highlightId = highlightId;
-	m_highlights->SetVideoHighlightAsync(params, [this](GfeSDK::NVGSDK_RetCode rc, void*)
+	std::promise<int> promise;
+	std::future<int> future = promise.get_future();
+	m_highlights->SetVideoHighlightAsync(params, [this, &promise](GfeSDK::NVGSDK_RetCode rc, void*)
 		{
 			UpdateLastResultString(rc);
+			promise.set_value(1);
 		}
 	);
-	return 1;
+	if (future.wait_for(timeout) == std::future_status::ready)
+	{
+		return future.get();
+	}
+	return 0;
 }
 
-void Gfe::ConfigureHighlights(char const* defaultLocale, GfeSDK::NVGSDK_Highlight* highlights, size_t numHighlights)
+int Gfe::ConfigureHighlights(char const* defaultLocale, GfeSDK::NVGSDK_Highlight* highlights, size_t numHighlights)
 {
 	m_highlights.reset(GfeSDK::Highlights::Create(m_gfesdk.get()));
 	GfeSDK::HighlightConfigParams configParams;
@@ -243,11 +267,19 @@ void Gfe::ConfigureHighlights(char const* defaultLocale, GfeSDK::NVGSDK_Highligh
 		}
 		configParams.highlightDefinitions.push_back(highlightDef);
 	}
-	m_highlights->ConfigureAsync(configParams, [this](GfeSDK::NVGSDK_RetCode rc, void*)
+	std::promise<int> promise;
+	std::future<int> future = promise.get_future();
+	m_highlights->ConfigureAsync(configParams, [this, &promise](GfeSDK::NVGSDK_RetCode rc, void*)
 		{
 			UpdateLastResultString(rc);
+			promise.set_value(1);
 		}
 	);
+	if (future.wait_for(timeout) == std::future_status::ready)
+	{
+		return future.get();
+	}
+	return 0;
 }
 
 void Gfe::UpdateLastResultString(GfeSDK::NVGSDK_RetCode rc)

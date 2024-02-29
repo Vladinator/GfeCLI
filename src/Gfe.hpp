@@ -26,7 +26,7 @@ public:
 
 private:
 
-	void ConfigureHighlights(char const* defaultLocale, GfeSDK::NVGSDK_Highlight* highlights, size_t numHighlights);
+	int ConfigureHighlights(char const* defaultLocale, GfeSDK::NVGSDK_Highlight* highlights, size_t numHighlights);
 	void UpdateLastResultString(GfeSDK::NVGSDK_RetCode rc);
 	std::unique_ptr<GfeSDK::Core> m_gfesdk;
 	std::unique_ptr<GfeSDK::Highlights> m_highlights;
